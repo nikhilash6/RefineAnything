@@ -2,6 +2,10 @@
 
 **Multimodal Region-Specific Refinement for Perfect Local Details**
 
+<a href="https://limuloo.github.io/RefineAnything/"><img src="https://img.shields.io/badge/Project-Page-blue" /></a>
+<a href="https://arxiv.org/abs/2604.06870"><img src="https://img.shields.io/badge/arXiv-2604.06870-b31b1b" /></a>
+<a href="https://github.com/limuloo/RefineAnything"><img src="https://img.shields.io/badge/GitHub-Code-black?logo=github" /></a>
+
 RefineAnything targets **region-specific image refinement**: given an input image and a user-specified region (e.g., scribble mask or bounding box), it restores fine-grained details—text, logos, thin structures—while keeping **all non-edited pixels unchanged**. It supports both **reference-based** and **reference-free** refinement.
 
 ![Teaser](docs/static/teaser.png)
@@ -63,14 +67,17 @@ Optional **Gradio** demo and HTTP API will be documented here if included in the
 
 ## Citation
 
-If you use this repository, please cite as follows (update `author` and URL when available):
+If you use this repository, please cite:
 
 ```bibtex
-@misc{refineanything2026,
+@article{refineanything2026,
   title        = {RefineAnything: Multimodal Region-Specific Refinement for Perfect Local Details},
   author       = {TBD},
   year         = {2026},
-  howpublished = {\url{https://github.com/limuloo/RefineAnything}},
+  eprint       = {2604.06870},
+  archivePrefix= {arXiv},
+  primaryClass = {cs.CV},
+  url          = {https://arxiv.org/abs/2604.06870},
 }
 ```
 
