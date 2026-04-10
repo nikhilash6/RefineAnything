@@ -1,0 +1,7 @@
+huggingface-hub==0.34.3
+transformers==4.55.0
+datasets
+peft==0.17.0
+attrs
+gradio
+git+https://github.com/huggingface/diffusers

@@ -9,11 +9,11 @@
 RefineAnything targets **region-specific image refinement**: given an input image and a user-specified region (e.g., scribble mask or bounding box), it restores fine-grained details—text, logos, thin structures—while keeping **all non-edited pixels unchanged**. It supports both **reference-based** and **reference-free** refinement.
 
 ![Teaser](docs/static/teaser.png)
-
 ---
 
 ## News
-
+🔥 The checkpoint will be released very soon!
+- **2026-04-09** — Release inference scripts.
 - **2026-04-08** — Documentation skeleton added; **code release coming this month** (inference scripts, environment, and checkpoints will be linked here).
 - **TBD** — Checkpoints and training/evaluation resources will be announced once finalized.
 
@@ -24,7 +24,6 @@ RefineAnything targets **region-specific image refinement**: given an input imag
 - **Region-accurate refinement** — Explicit region cues (scribbles or boxes) steer edits to the target area.
 - **Reference-based and reference-free** — Optional reference image for guided local detail recovery.
 - **Strict background preservation** — Edits stay inside the target region; training emphasizes seamless boundaries.
-- **Data and benchmark** — A training corpus spanning reference-based and reference-free settings, plus evaluation focused on region fidelity and background consistency (details ship with the code release).
 
 ---
 
@@ -38,30 +37,87 @@ RefineAnything targets **region-specific image refinement**: given an input imag
 
 ## Installation
 
-> **Coming with the code release.** Versions below are placeholders.
-
 ```bash
-# git clone https://github.com/limuloo/RefineAnything.git
-# cd RefineAnything
-# conda create -n refineanything python=3.10 -y
-# conda activate refineanything
-# pip install -r requirements.txt
-# pip install -e .
+pip install -r requirement.txt
 ```
 
 ---
 
-## Quick start
+## Quick Start
 
-> **Coming with the code release.**
+Only **three** things are required to run RefineAnything:
+
+| Argument | Description |
+|----------|-------------|
+| `--input` | Source image |
+| `--mask` | Binary mask (white = region to refine) |
+| `--prompt` | What to refine |
+| `--ref` | *(optional)* Reference image for guided refinement |
+
+---
+
+### Demo 1 — Reference-based Logo Refinement
+
+Refine a blurry logo on a pillow using a reference image.
 
 ```bash
-# Example (final CLI may differ):
-# python scripts/infer.py --image path/to/image.png --mask path/to/mask.png \
-#   --prompt "Refine the text on the sign." [--reference path/to/ref.png]
+python scripts/fast_inference.py \
+    --input  src/input1.png \
+    --mask   src/mask1.png \
+    --prompt "Refine the LOGO." \
+    --ref    src/ref1.png \
+    --output output/demo1.png
 ```
 
-Optional **Gradio** demo and HTTP API will be documented here if included in the release.
+<table>
+<tr>
+<td align="center"><b>Input</b></td>
+<td align="center"><b>Reference</b></td>
+<td align="center"><b>Prompt</b></td>
+</tr>
+<tr>
+<td><img src="docs/static/demo1_input_zoom.jpg" width="100%"></td>
+<td><img src="src/ref1.png" width="100%"></td>
+<td><i>"Refine the LOGO."</i></td>
+</tr>
+<tr>
+<td align="center" colspan="3"><b>Output</b></td>
+</tr>
+<tr>
+<td colspan="3"><img src="docs/static/demo1_output_zoom.jpg" width="100%"></td>
+</tr>
+</table>
+
+---
+
+### Demo 2 — Reference-free Text Refinement
+
+Refine blurry Chinese text on a building sign — no reference image needed.
+
+```bash
+python scripts/fast_inference.py \
+    --input  src/input2.png \
+    --mask   src/mask2.png \
+    --prompt "refine the text '鼎好商城'" \
+    --output output/demo2.png
+```
+
+<table>
+<tr>
+<td align="center"><b>Input</b></td>
+<td align="center"><b>Prompt</b></td>
+</tr>
+<tr>
+<td><img src="docs/static/demo2_input_zoom.jpg" width="100%"></td>
+<td><i>"refine the text '鼎好商城'"</i></td>
+</tr>
+<tr>
+<td align="center" colspan="2"><b>Output</b></td>
+</tr>
+<tr>
+<td colspan="2"><img src="docs/static/demo2_output_zoom.jpg" width="100%"></td>
+</tr>
+</table>
 
 ---
 
@@ -83,7 +139,7 @@ If you use this repository, please cite:
 
 ---
 
-## Acknowledgements and license
+## Acknowledgements and License
 
 RefineAnything builds on ideas and components from the broader diffusion and multimodal ecosystem (including **Qwen2.5-VL**, **Qwen-Image**, and latent diffusion with **VAE** + **MMDiT**). Base model weights and API terms are subject to their respective licenses—**verify compliance before redistributing checkpoints or derived weights**.
 
