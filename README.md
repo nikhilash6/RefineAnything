@@ -129,14 +129,11 @@ python scripts/fast_inference.py \
 If you use this repository, please cite:
 
 ```bibtex
-@article{refineanything2026,
-  title        = {RefineAnything: Multimodal Region-Specific Refinement for Perfect Local Details},
-  author       = {TBD},
-  year         = {2026},
-  eprint       = {2604.06870},
-  archivePrefix= {arXiv},
-  primaryClass = {cs.CV},
-  url          = {https://arxiv.org/abs/2604.06870},
+@article{zhou2026refineanything,
+  title={RefineAnything: Multimodal Region-Specific Refinement for Perfect Local Details},
+  author={Zhou, Dewei and Li, You and Yang, Zongxin and Yang, Yi},
+  journal={arXiv preprint arXiv:2604.06870},
+  year={2026}
 }
 ```
 
