@@ -14,6 +14,7 @@ RefineAnything targets **region-specific image refinement**: given an input imag
 ---
 
 ## News
+- **2026-04-14** — Local Gradio demo (`app.py`) is available for interactive testing.
 - **2026-04-12** — Hugging Face Space demo is live: <https://huggingface.co/spaces/limuloo1999/RefineAnything>.
 - **2026-04-09** — Checkpoint released on Hugging Face: <https://huggingface.co/limuloo1999/RefineAnything>.
 - **2026-04-09** — Release inference scripts.
@@ -121,6 +122,31 @@ python scripts/fast_inference.py \
 <td colspan="2"><img src="docs/static/demo2_output_zoom.jpg" width="100%"></td>
 </tr>
 </table>
+
+---
+
+## Local Gradio Demo
+
+We also provide a Gradio-based web UI for interactive testing. You can brush regions, upload reference images, and adjust all inference parameters in the browser.
+
+```bash
+python app.py
+```
+
+Then open `http://localhost:7860` in your browser. The app will automatically download the base model (`Qwen/Qwen-Image-Edit-2511`) and the RefineAnything LoRA from Hugging Face on first launch.
+
+You can specify a custom base model path via the `MODEL_DIR` environment variable:
+
+```bash
+MODEL_DIR=/path/to/local/Qwen-Image-Edit-2511 python app.py
+```
+
+**Features of the Gradio demo:**
+- **Brush-to-select**: paint directly on the source image to define the refinement region.
+- **Optional reference image**: upload a second image and optionally brush to crop a specific reference area.
+- **Focus crop**: automatically crops and zooms into the edit region for higher detail fidelity, then composites back seamlessly.
+- **Lightning LoRA**: one-click toggle for faster inference with fewer steps.
+- **Before / After slider**: instantly compare input and output.
 
 ---
 
