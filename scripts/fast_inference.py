@@ -17,12 +17,39 @@ Usage:
 """
 
 import argparse
+import io
 import math
 import os
 
 import numpy as np
 import torch
-from PIL import Image, ImageFilter
+from PIL import Image, ImageCms, ImageFilter
+
+
+def normalize_to_srgb(img: Image.Image) -> Image.Image:
+    """Convert a PIL image to sRGB, applying the embedded ICC profile when present.
+
+    Keeps the image in the same color space the model was trained on and
+    prevents off-gamut shifts from images tagged with e.g. Display P3.
+    """
+    if img is None:
+        return img
+    icc = img.info.get("icc_profile") if hasattr(img, "info") else None
+    if icc:
+        try:
+            src_profile = ImageCms.ImageCmsProfile(io.BytesIO(icc))
+            dst_profile = ImageCms.createProfile("sRGB")
+            img = ImageCms.profileToProfile(
+                img,
+                src_profile,
+                dst_profile,
+                outputMode="RGB",
+            )
+        except Exception:
+            img = img.convert("RGB")
+    else:
+        img = img.convert("RGB")
+    return img
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -80,9 +107,17 @@ _HF_LORA_REPO = "limuloo1999/RefineAnything"
 _HF_LORA_FILENAME = "Qwen-Image-Edit-2511-RefineAny.safetensors"
 _HF_LORA_ADAPTER = "refine_anything"
 
+_HF_LIGHTNING_REPO = "lightx2v/Qwen-Image-Edit-2511-Lightning"
+_HF_LIGHTNING_FILENAME = "Qwen-Image-Edit-2511-Lightning-8steps-V1.0-bf16.safetensors"
+_HF_LIGHTNING_ADAPTER = "lightning"
 
-def build_pipeline(model_dir: str, device: str = "cuda"):
-    """Load QwenImageEditPlusPipeline + RefineAnything LoRA, ready for inference."""
+
+def build_pipeline(model_dir: str, device: str = "cuda", load_lightning_lora: bool = True):
+    """Load QwenImageEditPlusPipeline + RefineAnything LoRA, ready for inference.
+
+    When *load_lightning_lora* is True (default), also loads the Lightning
+    distillation LoRA so inference works well at ~8 steps.
+    """
     from diffusers import FlowMatchEulerDiscreteScheduler, QwenImageEditPlusPipeline
     from huggingface_hub import hf_hub_download
 
@@ -114,7 +149,23 @@ def build_pipeline(model_dir: str, device: str = "cuda"):
         weight_name=os.path.basename(lora_path),
         adapter_name=_HF_LORA_ADAPTER,
     )
-    pipe.set_adapters([_HF_LORA_ADAPTER], adapter_weights=[1.0])
+
+    adapter_names = [_HF_LORA_ADAPTER]
+    adapter_weights = [1.0]
+
+    if load_lightning_lora:
+        lightning_path = hf_hub_download(
+            repo_id=_HF_LIGHTNING_REPO, filename=_HF_LIGHTNING_FILENAME,
+        )
+        pipe.load_lora_weights(
+            os.path.dirname(lightning_path),
+            weight_name=os.path.basename(lightning_path),
+            adapter_name=_HF_LIGHTNING_ADAPTER,
+        )
+        adapter_names.append(_HF_LIGHTNING_ADAPTER)
+        adapter_weights.append(1.0)
+
+    pipe.set_adapters(adapter_names, adapter_weights=adapter_weights)
     return pipe
 
 
@@ -224,13 +275,14 @@ def refine(
     focus_crop_margin: int = 64,
     mask_grow: int = 3,
     blend_blur: int = 5,
+    load_lightning_lora: bool = True,
 ) -> Image.Image:
     """
     Full RefineAnything pipeline:
         1. Load inputs  →  2. Focus crop  →  3. Inference  →  4. Paste back  →  5. Save
     """
     # 1. Load inputs
-    input_image = Image.open(input_path).convert("RGB")
+    input_image = normalize_to_srgb(Image.open(input_path))
     mask_l = Image.open(mask_path).convert("L")
     if mask_l.size != input_image.size:
         mask_l = mask_l.resize(input_image.size, Image.NEAREST)
@@ -238,7 +290,7 @@ def refine(
 
     ref_image = None
     if ref_path and os.path.isfile(ref_path):
-        ref_image = Image.open(ref_path).convert("RGB")
+        ref_image = normalize_to_srgb(Image.open(ref_path))
 
     # 2. Focus crop
     crop_box = None
@@ -249,7 +301,7 @@ def refine(
         )
 
     # 3. Inference
-    pipe = build_pipeline(model_dir, device=device)
+    pipe = build_pipeline(model_dir, device=device, load_lightning_lora=load_lightning_lora)
     generated = run_inference(
         pipe, model_image, model_mask, prompt, ref_image,
         seed=seed, num_steps=num_steps, true_cfg_scale=true_cfg_scale,
@@ -294,6 +346,11 @@ def parse_args():
     p.add_argument("--focus_crop_margin", type=int, default=64)
     p.add_argument("--mask_grow", type=int, default=3)
     p.add_argument("--blend_blur", type=int, default=5)
+    p.add_argument(
+        "--no_lightning_lora",
+        action="store_true",
+        help="Disable Lightning LoRA (enabled by default for ~8-step inference)",
+    )
     return p.parse_args()
 
 
@@ -316,6 +373,7 @@ def main():
         focus_crop_margin=args.focus_crop_margin,
         mask_grow=args.mask_grow,
         blend_blur=args.blend_blur,
+        load_lightning_lora=not args.no_lightning_lora,
     )
 
 

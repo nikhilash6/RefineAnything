@@ -159,7 +159,32 @@ def build_app():
     import numpy as np
     import random
     import re
-    from PIL import Image
+    from PIL import Image, ImageCms
+
+    def normalize_to_srgb(img: Image.Image) -> Image.Image:
+        """Convert a PIL image to sRGB, applying the embedded ICC profile when present.
+
+        Keeps the image in the same color space the model was trained on and
+        prevents off-gamut shifts from images tagged with e.g. Display P3.
+        """
+        if img is None:
+            return img
+        icc = img.info.get("icc_profile") if hasattr(img, "info") else None
+        if icc:
+            try:
+                src_profile = ImageCms.ImageCmsProfile(io.BytesIO(icc))
+                dst_profile = ImageCms.createProfile("sRGB")
+                img = ImageCms.profileToProfile(
+                    img,
+                    src_profile,
+                    dst_profile,
+                    outputMode="RGB",
+                )
+            except Exception:
+                img = img.convert("RGB")
+        else:
+            img = img.convert("RGB")
+        return img
 
     def _to_float01_rgb(img: Image.Image) -> np.ndarray:
         arr = np.asarray(img.convert("RGB")).astype(np.float32) / 255.0
@@ -447,7 +472,7 @@ def build_app():
             img_pil = img
 
         if hasattr(img_pil, "convert"):
-            img_pil = img_pil.convert("RGB")
+            img_pil = normalize_to_srgb(img_pil)
 
         iw, ih = img_pil.size
         vit_w, vit_h = vit_resize_dims(iw, ih, vit_resize_size=384)
@@ -523,7 +548,7 @@ def build_app():
             return None, None
 
         if not isinstance(image2_value, dict):
-            return _to_rgb_pil(image2_value, label="image2"), None
+            return normalize_to_srgb(_to_rgb_pil(image2_value, label="image2")), None
 
         if "image" in image2_value and "mask" in image2_value:
             img = image2_value["image"]
@@ -548,7 +573,7 @@ def build_app():
             img_pil = Image.fromarray(img.astype(np.uint8))
         else:
             img_pil = img
-        img_pil = img_pil.convert("RGB")
+        img_pil = normalize_to_srgb(img_pil)
 
         if mask is None:
             return img_pil, None
