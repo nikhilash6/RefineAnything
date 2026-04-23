@@ -73,8 +73,51 @@ _HF_LORA_REPO = "limuloo1999/RefineAnything"
 _HF_LORA_FILENAME = "Qwen-Image-Edit-2511-RefineAny.safetensors"
 _HF_LORA_ADAPTER = "refine_anything"
 
-_LIGHTNING_LOADED = False
+_LIGHTNING_REPO = "lightx2v/Qwen-Image-Edit-2511-Lightning"
+
+# Selectable Lightning LoRA variants. Each entry maps a UI label to the
+# weight filename in the HF repo, the adapter name registered on the
+# pipeline, and the recommended default number of sampling steps.
+_LIGHTNING_VARIANTS: dict[str, dict] = {
+    "Lightning-8steps-V1.0": {
+        "filename": "Qwen-Image-Edit-2511-Lightning-8steps-V1.0-bf16.safetensors",
+        "adapter": "lightning_8steps",
+        "default_steps": 8,
+        "default_true_cfg_scale": 1.0,
+    },
+    "Lightning-4steps-V1.0": {
+        "filename": "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
+        "adapter": "lightning_4steps",
+        "default_steps": 4,
+        "default_true_cfg_scale": 1.0,
+    },
+}
+_LIGHTNING_NONE_LABEL = "Not use"
+_LIGHTNING_NONE_DEFAULT_STEPS = 28
+_LIGHTNING_NONE_DEFAULT_TRUE_CFG = 4.0
+_LIGHTNING_DEFAULT_LABEL = "Lightning-4steps-V1.0"
+_LIGHTNING_CHOICES = [_LIGHTNING_NONE_LABEL, *list(_LIGHTNING_VARIANTS.keys())]
+
+_LIGHTNING_LOADED_ADAPTERS: set[str] = set()
 _PIPELINE_LOCK = threading.Lock()
+
+
+def _lightning_default_steps(choice: str) -> int:
+    if not choice or choice == _LIGHTNING_NONE_LABEL:
+        return _LIGHTNING_NONE_DEFAULT_STEPS
+    info = _LIGHTNING_VARIANTS.get(choice)
+    if info is None:
+        return _LIGHTNING_NONE_DEFAULT_STEPS
+    return int(info.get("default_steps", _LIGHTNING_NONE_DEFAULT_STEPS))
+
+
+def _lightning_default_true_cfg(choice: str) -> float:
+    if not choice or choice == _LIGHTNING_NONE_LABEL:
+        return _LIGHTNING_NONE_DEFAULT_TRUE_CFG
+    info = _LIGHTNING_VARIANTS.get(choice)
+    if info is None:
+        return _LIGHTNING_NONE_DEFAULT_TRUE_CFG
+    return float(info.get("default_true_cfg_scale", _LIGHTNING_NONE_DEFAULT_TRUE_CFG))
 
 
 def _build_pipeline(model_dir: str):
@@ -122,25 +165,37 @@ _PIPELINE = _build_pipeline(_DEFAULT_MODEL_DIR)
 print("[startup] Pipeline ready.")
 
 
-def _get_pipeline(load_lightning_lora: bool):
-    global _LIGHTNING_LOADED
+def _get_pipeline(lightning_lora_choice: str):
+    """Select adapter weights for this request.
 
+    ``lightning_lora_choice`` is one of the labels in ``_LIGHTNING_CHOICES``.
+    Lightning variants are lazily downloaded and registered on first use so
+    startup stays fast and only the variants the user actually picks consume
+    memory.
+    """
     with _PIPELINE_LOCK:
-        if load_lightning_lora and not _LIGHTNING_LOADED:
-            lightning_path = hf_hub_download(
-                repo_id="lightx2v/Qwen-Image-Edit-2511-Lightning",
-                filename="Qwen-Image-Edit-2511-Lightning-8steps-V1.0-bf16.safetensors",
-            )
-            lightning_dir = os.path.dirname(lightning_path)
-            lightning_weight = os.path.basename(lightning_path)
-            _PIPELINE.load_lora_weights(lightning_dir, weight_name=lightning_weight, adapter_name="lightning")
-            _LIGHTNING_LOADED = True
+        selected_adapter: str | None = None
+        if lightning_lora_choice and lightning_lora_choice != _LIGHTNING_NONE_LABEL:
+            info = _LIGHTNING_VARIANTS.get(lightning_lora_choice)
+            if info is not None:
+                selected_adapter = info["adapter"]
+                if selected_adapter not in _LIGHTNING_LOADED_ADAPTERS:
+                    lightning_path = hf_hub_download(
+                        repo_id=_LIGHTNING_REPO,
+                        filename=info["filename"],
+                    )
+                    _PIPELINE.load_lora_weights(
+                        os.path.dirname(lightning_path),
+                        weight_name=os.path.basename(lightning_path),
+                        adapter_name=selected_adapter,
+                    )
+                    _LIGHTNING_LOADED_ADAPTERS.add(selected_adapter)
 
         adapter_names: list[str] = [_HF_LORA_ADAPTER]
         adapter_weights: list[float] = [1.0]
-        if _LIGHTNING_LOADED:
-            adapter_names.append("lightning")
-            adapter_weights.append(1.0 if load_lightning_lora else 0.0)
+        for adapter in _LIGHTNING_LOADED_ADAPTERS:
+            adapter_names.append(adapter)
+            adapter_weights.append(1.0 if adapter == selected_adapter else 0.0)
 
         if hasattr(_PIPELINE, "set_adapters"):
             try:
@@ -640,7 +695,7 @@ def build_app():
         steps,
         true_cfg_scale,
         guidance_scale,
-        load_lightning_lora,
+        lightning_lora_choice,
         paste_back_bbox,
         paste_back_mode,
         focus_crop_for_bbox,
@@ -718,7 +773,7 @@ def build_app():
         true_cfg_scale = float(true_cfg_scale) if true_cfg_scale is not None and str(true_cfg_scale).strip() else 4.0
         guidance_scale = float(guidance_scale) if guidance_scale is not None and str(guidance_scale).strip() else 1.0
 
-        pipe = _get_pipeline(load_lightning_lora=bool(load_lightning_lora))
+        pipe = _get_pipeline(lightning_lora_choice=lightning_lora_choice)
 
         img = img_for_model if image2_for_model is None else [img_for_model, image2_for_model]
         if spatial_mask_l is not None:
@@ -825,11 +880,22 @@ leave it as-is to reference the whole image, or **brush on it** to specify exact
             mode = gr.Radio(["Run inference", "Preview only"], value="Run inference", label="Mode", scale=2)
             seed = gr.Number(label="Seed", value=0, precision=0, scale=1)
             seed_dice = gr.Button("🎲 Random", scale=0, min_width=110)
-            steps = gr.Number(label="Steps", value=8, precision=0, scale=1)
+            steps = gr.Number(
+                label="Steps",
+                value=_lightning_default_steps(_LIGHTNING_DEFAULT_LABEL),
+                precision=0,
+                scale=1,
+            )
 
         with gr.Row():
             spatial_source = gr.Radio(["mask", "bbox"], value="mask", label="Spatial prompt source", scale=2)
-            load_lightning_lora = gr.Checkbox(label="Lightning LoRA (faster)", value=True, scale=1)
+            lightning_lora_choice = gr.Dropdown(
+                choices=_LIGHTNING_CHOICES,
+                value=_LIGHTNING_DEFAULT_LABEL,
+                label="Lightning LoRA (faster)",
+                scale=1,
+                filterable=False,
+            )
         with gr.Row():
             paste_back_mode = gr.Radio(["bbox", "mask"], value="bbox", label="Paste-back mode", scale=1)
             with gr.Column(scale=1):
@@ -840,7 +906,10 @@ leave it as-is to reference the whole image, or **brush on it** to specify exact
 
         with gr.Accordion("Advanced settings", open=False):
             with gr.Row():
-                true_cfg_scale = gr.Number(label="True CFG scale", value=4.0)
+                true_cfg_scale = gr.Number(
+                    label="True CFG scale",
+                    value=_lightning_default_true_cfg(_LIGHTNING_DEFAULT_LABEL),
+                )
                 guidance_scale = gr.Number(label="Guidance scale", value=1.0)
             with gr.Row():
                 paste_back_bbox = gr.Checkbox(label="Composite paste-back", value=True)
@@ -863,7 +932,7 @@ leave it as-is to reference the whole image, or **brush on it** to specify exact
             inputs=[
                 image1, image2, prompt, mode, spatial_source,
                 seed, steps, true_cfg_scale, guidance_scale,
-                load_lightning_lora,
+                lightning_lora_choice,
                 paste_back_bbox, paste_back_mode,
                 focus_crop_for_bbox, focus_crop_margin,
                 paste_mask_grow, paste_blend_kernel,
@@ -871,6 +940,18 @@ leave it as-is to reference the whole image, or **brush on it** to specify exact
             outputs=[out_image, replaced_prompt, image1_vis, status],
         )
         seed_dice.click(fn=_randomize_seed, inputs=None, outputs=seed)
+
+        def _on_lightning_change(choice):
+            return (
+                gr.update(value=_lightning_default_steps(choice)),
+                gr.update(value=_lightning_default_true_cfg(choice)),
+            )
+
+        lightning_lora_choice.change(
+            fn=_on_lightning_change,
+            inputs=lightning_lora_choice,
+            outputs=[steps, true_cfg_scale],
+        )
 
     return demo
 

@@ -182,7 +182,7 @@ def run_inference(
     *,
     seed: int = 0,
     num_steps: int = 8,
-    true_cfg_scale: float = 4.0,
+    true_cfg_scale: float = 1.0,
     guidance_scale: float = 1.0,
     negative_prompt: str = " ",
     device: str = "cuda",
@@ -268,7 +268,7 @@ def refine(
     device: str = "cuda",
     seed: int = 0,
     num_steps: int = 8,
-    true_cfg_scale: float = 4.0,
+    true_cfg_scale: float | None = None,
     guidance_scale: float = 1.0,
     negative_prompt: str = " ",
     do_focus_crop: bool = True,
@@ -280,7 +280,19 @@ def refine(
     """
     Full RefineAnything pipeline:
         1. Load inputs  →  2. Focus crop  →  3. Inference  →  4. Paste back  →  5. Save
+
+    ``true_cfg_scale`` defaults to 1.0 when the Lightning distillation LoRA
+    is loaded (Lightning bakes CFG into the weights, so running CFG>1 on top
+    of it stacks the guidance twice and destroys quality). Pass an explicit
+    value to override.
     """
+    if true_cfg_scale is None:
+        true_cfg_scale = 1.0 if load_lightning_lora else 4.0
+        print(
+            f"[fast_inference] auto true_cfg_scale={true_cfg_scale} "
+            f"(lightning_lora={'on' if load_lightning_lora else 'off'})"
+        )
+
     # 1. Load inputs
     input_image = normalize_to_srgb(Image.open(input_path))
     mask_l = Image.open(mask_path).convert("L")
@@ -339,7 +351,13 @@ def parse_args():
     p.add_argument("--device", default="cuda")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--steps", type=int, default=8)
-    p.add_argument("--true_cfg_scale", type=float, default=4.0)
+    p.add_argument(
+        "--true_cfg_scale",
+        type=float,
+        default=None,
+        help="True CFG scale. Defaults to 1.0 when Lightning LoRA is enabled "
+             "(required by Lightning distillation) and 4.0 otherwise.",
+    )
     p.add_argument("--guidance_scale", type=float, default=1.0)
     p.add_argument("--negative_prompt", default=" ")
     p.add_argument("--no_focus_crop", action="store_true")
